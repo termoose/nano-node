@@ -1201,9 +1201,10 @@ nano::signature_checker::~signature_checker ()
 
 void nano::signature_checker::add (nano::signature_check_set & check_a)
 {
-	check_threads[round_robin].add (check_a);
+	std::lock_guard<std::mutex> lock (mutex);
 
-	round_robin = (round_robin + 1) % (nr_threads + 1);
+	check_threads[round_robin].add (check_a);
+	round_robin = (round_robin + 1) % nr_threads;
 }
 
 void nano::signature_checker::stop ()

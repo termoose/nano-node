@@ -421,6 +421,7 @@ public:
 private:
 	unsigned int nr_threads;
 	unsigned int round_robin;
+	std::mutex mutex;
 	std::deque<nano::signature_checker_thread> check_threads;
 };
 class rolled_hash
