@@ -419,15 +419,9 @@ public:
 	void flush ();
 
 private:
-	void run ();
-	void verify (nano::signature_check_set & check_a);
-	std::deque<nano::signature_check_set> checks;
-	std::map<int, signature_checker_thread> check_threads;
-	bool started;
-	bool stopped;
-	std::mutex mutex;
-	std::condition_variable condition;
-	std::thread thread;
+	unsigned int nr_threads;
+	unsigned int round_robin;
+	std::deque<nano::signature_checker_thread> check_threads;
 };
 class rolled_hash
 {
