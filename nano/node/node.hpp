@@ -390,6 +390,25 @@ public:
 	int * verifications;
 	std::promise<void> * promise;
 };
+class signature_checker_thread
+{
+public:
+	signature_checker_thread ();
+	~signature_checker_thread ();
+	void add (signature_check_set &);
+	void stop ();
+	void flush ();
+
+private:
+	void run ();
+	void verify (nano::signature_check_set & check_a);
+	std::deque<nano::signature_check_set> checks;
+	bool started;
+	bool stopped;
+	std::mutex mutex;
+	std::condition_variable condition;
+	std::thread thread;
+};
 class signature_checker
 {
 public:
@@ -403,6 +422,7 @@ private:
 	void run ();
 	void verify (nano::signature_check_set & check_a);
 	std::deque<nano::signature_check_set> checks;
+	std::map<int, signature_checker_thread> check_threads;
 	bool started;
 	bool stopped;
 	std::mutex mutex;

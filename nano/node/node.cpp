@@ -1102,6 +1102,91 @@ bool nano::rep_crawler::exists (nano::block_hash const & hash_a)
 	return active.count (hash_a) != 0;
 }
 
+nano::signature_checker_thread::signature_checker_thread () :
+started (false),
+stopped (false),
+thread ([this]() { run (); })
+{
+	std::unique_lock<std::mutex> lock (mutex);
+	while (!started)
+	{
+		condition.wait (lock);
+	}
+}
+
+nano::signature_checker_thread::~signature_checker_thread ()
+{
+	stop ();
+}
+
+void nano::signature_checker_thread::add (nano::signature_check_set & check_a)
+{
+	{
+		std::lock_guard<std::mutex> lock (mutex);
+		checks.push_back (check_a);
+	}
+	condition.notify_all ();
+}
+
+void nano::signature_checker_thread::stop ()
+{
+	std::unique_lock<std::mutex> lock (mutex);
+	stopped = true;
+	lock.unlock ();
+	condition.notify_all ();
+	if (thread.joinable ())
+	{
+		thread.join ();
+	}
+}
+
+void nano::signature_checker_thread::flush ()
+{
+	std::unique_lock<std::mutex> lock (mutex);
+	while (!stopped && !checks.empty ())
+	{
+		condition.wait (lock);
+	}
+}
+
+void nano::signature_checker_thread::verify (nano::signature_check_set & check_a)
+{
+	/* Verifications is vector if signatures check results
+	 validate_message_batch returing "true" if there are at least 1 invalid signature */
+	auto code (nano::validate_message_batch (check_a.messages, check_a.message_lengths, check_a.pub_keys, check_a.signatures, check_a.size, check_a.verifications));
+	(void)code;
+	release_assert (std::all_of (check_a.verifications, check_a.verifications + check_a.size, [](int verification) { return verification == 0 || verification == 1; }));
+	check_a.promise->set_value ();
+}
+
+void nano::signature_checker_thread::run ()
+{
+	nano::thread_role::set (nano::thread_role::name::signature_checking);
+	std::unique_lock<std::mutex> lock (mutex);
+	started = true;
+
+	lock.unlock ();
+	condition.notify_all ();
+	lock.lock ();
+
+	while (!stopped)
+	{
+		if (!checks.empty ())
+		{
+			auto check (checks.front ());
+			checks.pop_front ();
+			lock.unlock ();
+			verify (check);
+			condition.notify_all ();
+			lock.lock ();
+		}
+		else
+		{
+			condition.wait (lock);
+		}
+	}
+}
+
 nano::signature_checker::signature_checker () :
 started (false),
 stopped (false),
