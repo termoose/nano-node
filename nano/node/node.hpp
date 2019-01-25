@@ -390,11 +390,11 @@ public:
 	int * verifications;
 	std::promise<void> * promise;
 };
-class signature_checker
+class signature_checker_thread
 {
 public:
-	signature_checker ();
-	~signature_checker ();
+	signature_checker_thread ();
+	~signature_checker_thread ();
 	void add (signature_check_set &);
 	void stop ();
 	void flush ();
@@ -408,6 +408,21 @@ private:
 	std::mutex mutex;
 	std::condition_variable condition;
 	std::thread thread;
+};
+class signature_checker
+{
+public:
+	signature_checker ();
+	~signature_checker ();
+	void add (signature_check_set &);
+	void stop ();
+	void flush ();
+
+private:
+	unsigned int nr_threads;
+	unsigned int round_robin;
+	std::mutex mutex;
+	std::deque<nano::signature_checker_thread> check_threads;
 };
 class rolled_hash
 {

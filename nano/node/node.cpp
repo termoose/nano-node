@@ -1102,7 +1102,7 @@ bool nano::rep_crawler::exists (nano::block_hash const & hash_a)
 	return active.count (hash_a) != 0;
 }
 
-nano::signature_checker::signature_checker () :
+nano::signature_checker_thread::signature_checker_thread () :
 started (false),
 stopped (false),
 thread ([this]() { run (); })
@@ -1114,12 +1114,12 @@ thread ([this]() { run (); })
 	}
 }
 
-nano::signature_checker::~signature_checker ()
+nano::signature_checker_thread::~signature_checker_thread ()
 {
 	stop ();
 }
 
-void nano::signature_checker::add (nano::signature_check_set & check_a)
+void nano::signature_checker_thread::add (nano::signature_check_set & check_a)
 {
 	{
 		std::lock_guard<std::mutex> lock (mutex);
@@ -1128,7 +1128,7 @@ void nano::signature_checker::add (nano::signature_check_set & check_a)
 	condition.notify_all ();
 }
 
-void nano::signature_checker::stop ()
+void nano::signature_checker_thread::stop ()
 {
 	std::unique_lock<std::mutex> lock (mutex);
 	stopped = true;
@@ -1140,7 +1140,7 @@ void nano::signature_checker::stop ()
 	}
 }
 
-void nano::signature_checker::flush ()
+void nano::signature_checker_thread::flush ()
 {
 	std::unique_lock<std::mutex> lock (mutex);
 	while (!stopped && !checks.empty ())
@@ -1149,7 +1149,7 @@ void nano::signature_checker::flush ()
 	}
 }
 
-void nano::signature_checker::verify (nano::signature_check_set & check_a)
+void nano::signature_checker_thread::verify (nano::signature_check_set & check_a)
 {
 	/* Verifications is vector if signatures check results
 	 validate_message_batch returing "true" if there are at least 1 invalid signature */
@@ -1159,7 +1159,7 @@ void nano::signature_checker::verify (nano::signature_check_set & check_a)
 	check_a.promise->set_value ();
 }
 
-void nano::signature_checker::run ()
+void nano::signature_checker_thread::run ()
 {
 	nano::thread_role::set (nano::thread_role::name::signature_checking);
 	std::unique_lock<std::mutex> lock (mutex);
@@ -1184,6 +1184,42 @@ void nano::signature_checker::run ()
 		{
 			condition.wait (lock);
 		}
+	}
+}
+
+nano::signature_checker::signature_checker () :
+nr_threads(std::thread::hardware_concurrency()),
+round_robin(0)
+{
+	for (int n = 0; n < nr_threads; ++n)
+		check_threads.emplace_back ();
+}
+
+nano::signature_checker::~signature_checker ()
+{
+}
+
+void nano::signature_checker::add (nano::signature_check_set & check_a)
+{
+	std::lock_guard<std::mutex> lock (mutex);
+
+	check_threads[round_robin].add (check_a);
+	round_robin = (round_robin + 1) % nr_threads;
+}
+
+void nano::signature_checker::stop ()
+{
+	for(auto & check : check_threads)
+	{
+		check.stop ();
+	}
+}
+
+void nano::signature_checker::flush ()
+{
+	for(auto & check : check_threads)
+	{
+		check.flush ();
 	}
 }
 
